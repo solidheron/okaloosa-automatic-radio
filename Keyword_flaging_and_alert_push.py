@@ -5,6 +5,10 @@ import importlib
 from datetime import datetime, timedelta
 
 def load_keywords():
+    """
+    Imports and reloads the keywords module to access clarifications, keyword categories, and street data.
+    Returns these data structures for use in processing transcriptions.
+    """
     try:
         keywords = importlib.import_module('keywords')
         importlib.reload(keywords)
@@ -15,6 +19,10 @@ def load_keywords():
         return None, None, None
 
 def process_transcription_csv(input_file, flagged_file, annotated_file, clarifications, keyword_categories, street_data):
+    """
+    Processes the transcription CSV file to identify and flag keywords and street names.
+    Writes flagged data to flagged_data.csv and annotated data to annotated.csv.
+    """
     with open(input_file, 'r', newline='', encoding='utf-8') as infile, \
          open(flagged_file, 'w', newline='', encoding='utf-8') as flagged_outfile, \
          open(annotated_file, 'w', newline='', encoding='utf-8') as annotated_outfile:
@@ -88,6 +96,10 @@ def process_transcription_csv(input_file, flagged_file, annotated_file, clarific
                 annotated_writer.writerow(annotated_row)
 
 def search_nearby_transcriptions(all_rows, current_index, current_time, keyword_categories):
+    """
+    Searches for nearby transcriptions within a 3-minute window to find non-null categories.
+    Returns a suitable category if found, otherwise returns None.
+    """
     for i in range(max(0, current_index - 20), min(len(all_rows), current_index + 20)):
         if i == current_index:
             continue
@@ -107,12 +119,18 @@ def search_nearby_transcriptions(all_rows, current_index, current_time, keyword_
     return None
 
 def countdown_timer(seconds, interval):
+    """
+    Displays a countdown timer in the console, updating every 'interval' seconds.
+    """
     for remaining in range(seconds, 0, -interval):
         print(f"\rNext check in {remaining} seconds...", end="")
         time.sleep(interval)
     print("\rChecking now...                ", end="\r")
 
 def main():
+    """
+    Main function that sets up file paths, loads keywords, and processes transcriptions in a loop.
+    """
     input_directory = r"D:\Police_audio_recordings"  # Change this to your input directory
     input_file = os.path.join(input_directory, "transcriptions.csv")
     flagged_file = os.path.join(input_directory, "flagged_data.csv")
