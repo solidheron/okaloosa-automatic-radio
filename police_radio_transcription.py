@@ -7,7 +7,6 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from datetime import datetime
 from queue import Queue
-from keywords import clarifications
 
 class NewFileHandler(FileSystemEventHandler):
     """Handles new .wav files created in the watched directory."""
@@ -64,7 +63,6 @@ class NewFileHandler(FileSystemEventHandler):
                 result = self.medium_model.transcribe(file_path, without_timestamps=False, fp16=False)
                 segments = [segment['text'] for segment in result['segments']]
                 concatenated_text = ' / '.join(segments)
-                text_with_clarifications = self.add_clarifications(concatenated_text)
 
                 # Get the last end time
                 last_end_time = result['segments'][-1]['end'] if result['segments'] else 0
@@ -73,8 +71,10 @@ class NewFileHandler(FileSystemEventHandler):
                 wav_length = self.get_wav_length(file_path)
 
                 # Write to CSV
-                self.write_to_csv(file_path, text_with_clarifications, "medium.en", last_end_time, wav_length)
+                self.write_to_csv(file_path, concatenated_text, "medium.en", last_end_time, wav_length)
+
                 self.processed_files.add(file_name)
+
             except Exception as e:
                 print(f"Error processing file {file_path}: {e}")
 
@@ -85,12 +85,6 @@ class NewFileHandler(FileSystemEventHandler):
             rate = wav_file.getframerate()
             duration = frames / float(rate)
         return duration
-
-    def add_clarifications(self, text):
-        """Adds clarifications to the transcribed text based on predefined keywords."""
-        for keyword, clarification in clarifications.items():
-            text = text.replace(keyword, clarification)
-        return text
 
     def write_to_csv(self, file_path, text, model_name, last_end_time, wav_length):
         """Writes the transcription data to the CSV file."""
