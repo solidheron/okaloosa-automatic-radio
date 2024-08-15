@@ -2,14 +2,12 @@
 this script is designed to get all the coordinates for the streets and points of interest in whatever place 
 you enter, can be a city,state,or county. recomended that to keep it either on the city or county level.
 set up to find the centriod of a road but the script can be modified to get indivual addresses.
-coordiates that dont have names will not get outputted.
+coordiates that dont have names will not get outputted. the coordinate will always be put inside a road.
 
 """
 import requests
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import LineString, Point
-from collections import defaultdict
+from shapely.geometry import LineString
+from shapely.ops import nearest_points
 
 def get_osm_data(area_name, feature):
     overpass_url = "http://overpass-api.de/api/interpreter"
@@ -41,98 +39,69 @@ def parse_osm_data(osm_data):
     for element in osm_data.get('elements', []):
         name = element['tags'].get('name')
         if name and name != 'Unnamed':
+            # Add a space at the beginning of the name
+            name = " " + name
+
             if element['type'] == 'way' and 'highway' in element['tags']:
                 if name not in streets:
                     geometry = LineString([(point['lon'], point['lat']) for point in element['geometry']])
                     centroid = geometry.centroid
+                    
+                    # Ensure the centroid is inside the geometry
+                    if not geometry.contains(centroid):
+                        # Find the nearest point on the geometry to the centroid
+                        nearest_point = nearest_points(geometry, centroid)[0]
+                        centroid = nearest_point  # Move centroid to the nearest point inside
+
                     streets[name] = (centroid.x, centroid.y)
+
             elif element['type'] == 'node':
                 item = {
                     'name': name,
-                    'type': 'Unknown',
                     'lon': element['lon'],
                     'lat': element['lat']
                 }
+
                 if 'tourism' in element['tags']:
-                    item['type'] = 'POI'
                     pois.append(item)
                 elif 'natural' in element['tags']:
-                    item['type'] = 'Natural Feature'
                     natural_features.append(item)
                 elif element['tags'].get('amenity') == 'fuel':
-                    item['type'] = 'Fuel Station'
                     fuel_stations.append(item)
 
-    unique_streets = [
-        {
-            'name': name,
-            'lon': lon,
-            'lat': lat
-        }
-        for name, (lon, lat) in streets.items()
-    ]
+    unique_streets = [{
+        'name': name,
+        'lon': lon,
+        'lat': lat
+    } for name, (lon, lat) in streets.items()]
 
     print(f"Parsed {len(unique_streets)} unique streets, {len(pois)} POIs, {len(natural_features)} natural features, and {len(fuel_stations)} fuel stations from OSM data")
     return unique_streets, pois, natural_features, fuel_stations
 
-def save_to_csv(streets, pois, natural_features, fuel_stations, filename):
-    data = []
+def save_to_txt(streets, pois, natural_features, fuel_stations, filename):
+    with open(filename, 'w') as file:
+        for street in streets:
+            file.write(f'"{street["name"]}",({street["lon"]}, {street["lat"]})\n')
+        for poi in pois:
+            file.write(f'"{poi["name"]}",({poi["lon"]}, {poi["lat"]})\n')
+        for natural_feature in natural_features:
+            file.write(f'"{natural_feature["name"]}",({natural_feature["lon"]}, {natural_feature["lat"]})\n')
+        for fuel_station in fuel_stations:
+            file.write(f'"{fuel_station["name"]}",({fuel_station["lon"]}, {fuel_station["lat"]})\n')
 
-    for street in streets:
-        data.append({
-            'name': street['name'],
-            'type': 'Street',
-            'lon': street['lon'],
-            'lat': street['lat'],
-            'area': 'Destin'
-        })
-
-    for poi in pois:
-        data.append({
-            'name': poi['name'],
-            'type': poi['type'],
-            'lon': poi['lon'],
-            'lat': poi['lat'],
-            'area': 'Destin'
-        })
-
-    for natural_feature in natural_features:
-        data.append({
-            'name': natural_feature['name'],
-            'type': natural_feature['type'],
-            'lon': natural_feature['lon'],
-            'lat': natural_feature['lat'],
-            'area': 'Destin'
-        })
-
-    for fuel_station in fuel_stations:
-        data.append({
-            'name': fuel_station['name'],
-            'type': fuel_station['type'],
-            'lon': fuel_station['lon'],
-            'lat': fuel_station['lat'],
-            'area': 'Destin'
-        })
-
-    if not data:
-        print(f"No data to save. CSV file '{filename}' will be empty.")
-        return
-
-    df = pd.DataFrame(data)
-    df.to_csv(filename, index=False)
-    print(f"CSV file '{filename}' has been created with {len(data)} entries.")
+    print(f"TXT file '{filename}' has been created.")
 
 def main():
-    area_name = "Okaloosa County" #change this to the city,state, or county that you want to fetch data from 
+    area_name = "Okaloosa County"  # Change this to the city, state, or county that you want to fetch data from
     feature = "highway"
-    filename = "Street_POI_coordinate_data.csv"
+    filename = "Street_POI_coordinate_data.txt"
     try:
         print(f"Fetching OSM data for {area_name}...")
         osm_data = get_osm_data(area_name, feature)
         print("Parsing OSM data...")
         streets, pois, natural_features, fuel_stations = parse_osm_data(osm_data)
         print(f"Saving data to {filename}...")
-        save_to_csv(streets, pois, natural_features, fuel_stations, filename)
+        save_to_txt(streets, pois, natural_features, fuel_stations, filename)
     except requests.exceptions.RequestException as e:
         print(f"Error fetching data from Overpass API: {e}")
     except Exception as e:
